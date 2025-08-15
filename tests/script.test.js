@@ -1,8 +1,23 @@
 import { jest } from '@jest/globals';
-import script from '../src/script.mjs';
 
-// Mock fetch globally
-globalThis.fetch = jest.fn();
+// Mock the dependencies before importing the script
+jest.unstable_mockModule('@sgnl-ai/secevent', () => ({
+  createBuilder: jest.fn()
+}));
+
+jest.unstable_mockModule('@sgnl-ai/set-transmitter', () => ({
+  transmitSET: jest.fn()
+}));
+
+jest.unstable_mockModule('crypto', () => ({
+  createPrivateKey: jest.fn()
+}));
+
+// Import the modules after mocking
+const { createBuilder } = await import('@sgnl-ai/secevent');
+const { transmitSET } = await import('@sgnl-ai/set-transmitter');
+const { createPrivateKey } = await import('crypto');
+const script = await import('../src/script.mjs');
 
 describe('CAEP Token Claims Change', () => {
   const validParams = {
@@ -48,45 +63,51 @@ lUIPAweNrL/7ssEesKGGEw==
   };
 
   beforeEach(() => {
-    globalThis.fetch.mockClear();
+    jest.clearAllMocks();
+    
+    // Setup default mocks
+    const mockBuilder = {
+      withIssuer: jest.fn().mockReturnThis(),
+      withAudience: jest.fn().mockReturnThis(),
+      withIat: jest.fn().mockReturnThis(),
+      withClaim: jest.fn().mockReturnThis(),
+      withEvent: jest.fn().mockReturnThis(),
+      sign: jest.fn().mockResolvedValue({ jwt: 'mock.jwt.token' })
+    };
+    
+    createBuilder.mockReturnValue(mockBuilder);
+    createPrivateKey.mockReturnValue({ type: 'private' });
+    
+    transmitSET.mockResolvedValue({
+      status: 'success',
+      statusCode: 200,
+      body: '"success"',
+      retryable: false
+    });
   });
 
   describe('invoke handler', () => {
     test('should successfully transmit SET with minimal required params', async () => {
-      globalThis.fetch.mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        text: () => Promise.resolve('{"success": true}')
-      });
-
-      const result = await script.invoke(validParams, mockContext);
+      const result = await script.default.invoke(validParams, mockContext);
 
       expect(result.status).toBe('success');
       expect(result.statusCode).toBe(200);
-      expect(result.body).toBe('{"success": true}');
+      expect(result.body).toBe('"success"');
       expect(result.retryable).toBe(false);
 
-      expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect(transmitSET).toHaveBeenCalledWith(
+        'mock.jwt.token',
         'https://caep.receiver.com/events',
-        expect.objectContaining({
-          method: 'POST',
-          headers: expect.objectContaining({
-            'Accept': 'application/json',
-            'Content-Type': 'application/secevent+jwt',
+        {
+          headers: {
             'Authorization': 'Bearer test-bearer-token',
             'User-Agent': 'SGNL-Action-Framework/1.0'
-          })
-        })
+          }
+        }
       );
     });
 
     test('should include all optional parameters in event payload', async () => {
-      globalThis.fetch.mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        text: () => Promise.resolve('OK')
-      });
-
       const fullParams = {
         ...validParams,
         initiatingEntity: 'policy',
@@ -97,16 +118,18 @@ lUIPAweNrL/7ssEesKGGEw==
         userAgent: 'Custom-Agent/1.0'
       };
 
-      const result = await script.invoke(fullParams, mockContext);
+      const result = await script.default.invoke(fullParams, mockContext);
 
       expect(result.status).toBe('success');
-      expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect(transmitSET).toHaveBeenCalledWith(
+        'mock.jwt.token',
         'https://caep.receiver.com/events/caep',
-        expect.objectContaining({
-          headers: expect.objectContaining({
+        {
+          headers: {
+            'Authorization': 'Bearer test-bearer-token',
             'User-Agent': 'Custom-Agent/1.0'
-          })
-        })
+          }
+        }
       );
     });
 
@@ -119,7 +142,7 @@ lUIPAweNrL/7ssEesKGGEw==
       ];
 
       for (const { params, error } of testCases) {
-        await expect(script.invoke(params, mockContext)).rejects.toThrow(error);
+        await expect(script.default.invoke(params, mockContext)).rejects.toThrow(error);
       }
     });
 
@@ -129,7 +152,7 @@ lUIPAweNrL/7ssEesKGGEw==
         subject: 'invalid-json'
       };
 
-      await expect(script.invoke(invalidParams, mockContext)).rejects.toThrow(
+      await expect(script.default.invoke(invalidParams, mockContext)).rejects.toThrow(
         'Invalid subject JSON'
       );
     });
@@ -140,22 +163,22 @@ lUIPAweNrL/7ssEesKGGEw==
         claims: 'invalid-json'
       };
 
-      await expect(script.invoke(invalidParams, mockContext)).rejects.toThrow('Invalid claims JSON');
+      await expect(script.default.invoke(invalidParams, mockContext)).rejects.toThrow('Invalid claims JSON');
     });
 
     test('should require claims to be JSON object', async () => {
       // Test each case individually to ensure each fails at validation stage
       const invalidStringParams = { ...validParams, claims: '"string-value"' };
-      await expect(script.invoke(invalidStringParams, mockContext)).rejects.toThrow('Claims must be a JSON object');
+      await expect(script.default.invoke(invalidStringParams, mockContext)).rejects.toThrow('Claims must be a JSON object');
 
       const invalidNumberParams = { ...validParams, claims: '123' };
-      await expect(script.invoke(invalidNumberParams, mockContext)).rejects.toThrow('Claims must be a JSON object');
+      await expect(script.default.invoke(invalidNumberParams, mockContext)).rejects.toThrow('Claims must be a JSON object');
 
       const invalidNullParams = { ...validParams, claims: 'null' };
-      await expect(script.invoke(invalidNullParams, mockContext)).rejects.toThrow('Claims must be a JSON object');
+      await expect(script.default.invoke(invalidNullParams, mockContext)).rejects.toThrow('Claims must be a JSON object');
 
       const invalidArrayParams = { ...validParams, claims: '[]' };
-      await expect(script.invoke(invalidArrayParams, mockContext)).rejects.toThrow('Claims must be a JSON object');
+      await expect(script.default.invoke(invalidArrayParams, mockContext)).rejects.toThrow('Claims must be a JSON object');
     });
 
     test('should accept valid claims JSON objects', async () => {
@@ -168,14 +191,8 @@ lUIPAweNrL/7ssEesKGGEw==
       ];
 
       for (const claims of validClaimsExamples) {
-        globalThis.fetch.mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          text: () => Promise.resolve('OK')
-        });
-
         const params = { ...validParams, claims };
-        const result = await script.invoke(params, mockContext);
+        const result = await script.default.invoke(params, mockContext);
         expect(result.status).toBe('success');
       }
     });
@@ -187,7 +204,7 @@ lUIPAweNrL/7ssEesKGGEw==
         }
       };
 
-      await expect(script.invoke(validParams, contextWithoutKey)).rejects.toThrow(
+      await expect(script.default.invoke(validParams, contextWithoutKey)).rejects.toThrow(
         'SSF_KEY secret is required'
       );
     });
@@ -199,38 +216,27 @@ lUIPAweNrL/7ssEesKGGEw==
         }
       };
 
-      await expect(script.invoke(validParams, contextWithoutKeyId)).rejects.toThrow(
+      await expect(script.default.invoke(validParams, contextWithoutKeyId)).rejects.toThrow(
         'SSF_KEY_ID secret is required'
       );
     });
 
     test('should handle URL building with suffix', async () => {
-      globalThis.fetch.mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        text: () => Promise.resolve('OK')
-      });
-
       const paramsWithSuffix = {
         ...validParams,
         addressSuffix: '/caep/events'
       };
 
-      await script.invoke(paramsWithSuffix, mockContext);
+      await script.default.invoke(paramsWithSuffix, mockContext);
 
-      expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect(transmitSET).toHaveBeenCalledWith(
+        'mock.jwt.token',
         'https://caep.receiver.com/events/caep/events',
-        expect.any(Object)
+        expect.objectContaining({ headers: expect.any(Object) })
       );
     });
 
     test('should handle Bearer token prefix', async () => {
-      globalThis.fetch.mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        text: () => Promise.resolve('OK')
-      });
-
       const contextWithBearerToken = {
         secrets: {
           ...mockContext.secrets,
@@ -238,47 +244,37 @@ lUIPAweNrL/7ssEesKGGEw==
         }
       };
 
-      await script.invoke(validParams, contextWithBearerToken);
+      await script.default.invoke(validParams, contextWithBearerToken);
 
-      expect(globalThis.fetch).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          headers: expect.objectContaining({
-            'Authorization': 'Bearer already-prefixed-token'
-          })
-        })
+      expect(transmitSET).toHaveBeenCalledWith(
+        'mock.jwt.token',
+        'https://caep.receiver.com/events',
+        {
+          headers: {
+            'Authorization': 'Bearer already-prefixed-token',
+            'User-Agent': 'SGNL-Action-Framework/1.0'
+          }
+        }
       );
     });
 
     test('should parse i18n reason strings as JSON', async () => {
-      globalThis.fetch.mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        text: () => Promise.resolve('OK')
-      });
-
       const paramsWithI18nReason = {
         ...validParams,
         reasonAdmin: '{"en": "English reason", "es": "Razón en español"}'
       };
 
-      const result = await script.invoke(paramsWithI18nReason, mockContext);
+      const result = await script.default.invoke(paramsWithI18nReason, mockContext);
       expect(result.status).toBe('success');
     });
 
     test('should handle plain string reasons', async () => {
-      globalThis.fetch.mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        text: () => Promise.resolve('OK')
-      });
-
       const paramsWithStringReason = {
         ...validParams,
         reasonAdmin: 'Simple string reason'
       };
 
-      const result = await script.invoke(paramsWithStringReason, mockContext);
+      const result = await script.default.invoke(paramsWithStringReason, mockContext);
       expect(result.status).toBe('success');
     });
 
@@ -286,28 +282,33 @@ lUIPAweNrL/7ssEesKGGEw==
       const retryableCodes = [429, 502, 503, 504];
 
       for (const code of retryableCodes) {
-        globalThis.fetch.mockResolvedValueOnce({
-          ok: false,
-          status: code,
-          statusText: 'Error',
-          text: () => Promise.resolve('Error message')
-        });
+        transmitSET.mockRejectedValueOnce(
+          new Error(`SET transmission failed: ${code} Error`)
+        );
 
-        await expect(script.invoke(validParams, mockContext)).rejects.toThrow(
+        await expect(script.default.invoke(validParams, mockContext)).rejects.toThrow(
           `SET transmission failed: ${code} Error`
         );
+        
+        // Reset mock for next iteration
+        transmitSET.mockResolvedValue({
+          status: 'success',
+          statusCode: 200,
+          body: '"success"',
+          retryable: false
+        });
       }
     });
 
     test('should not throw for non-retryable HTTP errors', async () => {
-      globalThis.fetch.mockResolvedValueOnce({
-        ok: false,
-        status: 400,
-        statusText: 'Bad Request',
-        text: () => Promise.resolve('Bad request')
+      transmitSET.mockResolvedValueOnce({
+        status: 'failed',
+        statusCode: 400,
+        body: 'Bad request',
+        retryable: false
       });
 
-      const result = await script.invoke(validParams, mockContext);
+      const result = await script.default.invoke(validParams, mockContext);
 
       expect(result.status).toBe('failed');
       expect(result.statusCode).toBe(400);
@@ -315,12 +316,6 @@ lUIPAweNrL/7ssEesKGGEw==
     });
 
     test('should handle complex claims structures', async () => {
-      globalThis.fetch.mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        text: () => Promise.resolve('OK')
-      });
-
       const complexClaimsParams = {
         ...validParams,
         claims: JSON.stringify({
@@ -335,7 +330,7 @@ lUIPAweNrL/7ssEesKGGEw==
         })
       };
 
-      const result = await script.invoke(complexClaimsParams, mockContext);
+      const result = await script.default.invoke(complexClaimsParams, mockContext);
       expect(result.status).toBe('success');
     });
   });
@@ -349,7 +344,7 @@ lUIPAweNrL/7ssEesKGGEw==
           error: { message: `Error ${code}: Server error` }
         };
 
-        const result = await script.error(params, mockContext);
+        const result = await script.default.error(params, mockContext);
         expect(result).toEqual({ status: 'retry_requested' });
       }
     });
@@ -360,13 +355,13 @@ lUIPAweNrL/7ssEesKGGEw==
         error: testError
       };
 
-      await expect(script.error(params, mockContext)).rejects.toThrow(testError);
+      await expect(script.default.error(params, mockContext)).rejects.toThrow(testError);
     });
   });
 
   describe('halt handler', () => {
     test('should return halted status', async () => {
-      const result = await script.halt({}, mockContext);
+      const result = await script.default.halt({}, mockContext);
 
       expect(result).toEqual({ status: 'halted' });
     });
