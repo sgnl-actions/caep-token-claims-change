@@ -146,10 +146,10 @@ export default {
     const headers = {
       'User-Agent': params.userAgent || 'SGNL-Action-Framework/1.0'
     };
-    
+
     if (authToken) {
-      headers.Authorization = authToken.startsWith('Bearer ') 
-        ? authToken 
+      headers.Authorization = authToken.startsWith('Bearer ')
+        ? authToken
         : `Bearer ${authToken}`;
     }
 

@@ -64,7 +64,7 @@ lUIPAweNrL/7ssEesKGGEw==
 
   beforeEach(() => {
     jest.clearAllMocks();
-    
+
     // Setup default mocks
     const mockBuilder = {
       withIssuer: jest.fn().mockReturnThis(),
@@ -74,10 +74,10 @@ lUIPAweNrL/7ssEesKGGEw==
       withEvent: jest.fn().mockReturnThis(),
       sign: jest.fn().mockResolvedValue({ jwt: 'mock.jwt.token' })
     };
-    
+
     createBuilder.mockReturnValue(mockBuilder);
     createPrivateKey.mockReturnValue({ type: 'private' });
-    
+
     transmitSET.mockResolvedValue({
       status: 'success',
       statusCode: 200,
@@ -289,7 +289,7 @@ lUIPAweNrL/7ssEesKGGEw==
         await expect(script.default.invoke(validParams, mockContext)).rejects.toThrow(
           `SET transmission failed: ${code} Error`
         );
-        
+
         // Reset mock for next iteration
         transmitSET.mockResolvedValue({
           status: 'success',
