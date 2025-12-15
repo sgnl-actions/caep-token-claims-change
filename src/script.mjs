@@ -1,6 +1,7 @@
 import { createBuilder } from '@sgnl-ai/secevent';
 import { createPrivateKey } from 'crypto';
 import { transmitSET } from '@sgnl-ai/set-transmitter';
+import {resolveJSONPathTemplates} from '@sgnl-actions/utils';
 
 // Event type constant
 const TOKEN_CLAIMS_CHANGE_EVENT = 'https://schemas.openid.net/secevent/caep/event-type/token-claims-change';
@@ -69,17 +70,25 @@ export default {
    * Transmit a CAEP Token Claims Change event
    */
   invoke: async (params, context) => {
+    const jobContext = context.data || {};
+
+    // Resolve JSONPath templates in params
+    const { result: resolvedParams, errors } = resolveJSONPathTemplates(params, jobContext);
+    if (errors.length > 0) {
+     console.warn('Template resolution errors:', errors);
+    }
+
     // Validate required parameters
-    if (!params.audience) {
+    if (!resolvedParams.audience) {
       throw new Error('audience is required');
     }
-    if (!params.subject) {
+    if (!resolvedParams.subject) {
       throw new Error('subject is required');
     }
-    if (!params.address) {
+    if (!resolvedParams.address) {
       throw new Error('address is required');
     }
-    if (!params.claims) {
+    if (!resolvedParams.claims) {
       throw new Error('claims is required');
     }
 
@@ -96,27 +105,27 @@ export default {
     }
 
     // Parse and validate parameters early
-    const subject = parseSubject(params.subject);
-    const claims = parseClaims(params.claims);
+    const subject = parseSubject(resolvedParams.subject);
+    const claims = parseClaims(resolvedParams.claims);
 
-    const issuer = params.issuer || 'https://sgnl.ai/';
-    const signingMethod = params.signingMethod || 'RS256';
+    const issuer = resolvedParams.issuer || 'https://sgnl.ai/';
+    const signingMethod = resolvedParams.signingMethod || 'RS256';
 
     // Build event payload
     const eventPayload = {
-      event_timestamp: params.eventTimestamp || Math.floor(Date.now() / 1000),
+      event_timestamp: resolvedParams.eventTimestamp || Math.floor(Date.now() / 1000),
       claims: claims
     };
 
     // Add optional event claims
-    if (params.initiatingEntity) {
-      eventPayload.initiating_entity = params.initiatingEntity;
+    if (resolvedParams.initiatingEntity) {
+      eventPayload.initiating_entity = resolvedParams.initiatingEntity;
     }
-    if (params.reasonAdmin) {
-      eventPayload.reason_admin = parseReason(params.reasonAdmin);
+    if (resolvedParams.reasonAdmin) {
+      eventPayload.reason_admin = parseReason(resolvedParams.reasonAdmin);
     }
-    if (params.reasonUser) {
-      eventPayload.reason_user = parseReason(params.reasonUser);
+    if (resolvedParams.reasonUser) {
+      eventPayload.reason_user = parseReason(resolvedParams.reasonUser);
     }
 
     // Create the SET
@@ -124,7 +133,7 @@ export default {
 
     builder
       .withIssuer(issuer)
-      .withAudience(params.audience)
+      .withAudience(resolvedParams.audience)
       .withIat(Math.floor(Date.now() / 1000))
       .withClaim('sub_id', subject)  // CAEP 3.0 format
       .withEvent(TOKEN_CLAIMS_CHANGE_EVENT, eventPayload);
@@ -140,11 +149,11 @@ export default {
     const { jwt } = await builder.sign(signingKey);
 
     // Build destination URL
-    const url = buildUrl(params.address, params.addressSuffix);
+    const url = buildUrl(resolvedParams.address, resolvedParams.addressSuffix);
 
     // Transmit the SET
     const headers = {
-      'User-Agent': params.userAgent || 'SGNL-Action-Framework/1.0'
+      'User-Agent': resolvedParams.userAgent || 'SGNL-Action-Framework/1.0'
     };
 
     if (authToken) {
