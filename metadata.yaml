@@ -20,7 +20,7 @@ inputs:
 
   claims:
     type: text
-    description: JSON string containing the changed token claims (e.g., '{"role": "admin", "department": "finance"}')
+    description: JSON string containing the changed token claims (e.g., {"role":"admin","department":"finance"})
     required: true
     validation:
       min: 1
