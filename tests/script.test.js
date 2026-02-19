@@ -109,8 +109,8 @@ describe('CAEP Token Claims Change', () => {
           events: expect.objectContaining({
             'https://schemas.openid.net/secevent/caep/event-type/token-claims-change': expect.objectContaining({
               initiating_entity: 'policy',
-              reason_admin: { en: "Token claims updated", es: "Claims de token actualizados" },
-              reason_user: { en: "Your permissions have changed", es: "Tus permisos han cambiado" }
+              reason_admin: { en: 'Token claims updated', es: 'Claims de token actualizados' },
+              reason_user: { en: 'Your permissions have changed', es: 'Tus permisos han cambiado' }
             })
           })
         })
@@ -222,7 +222,7 @@ describe('CAEP Token Claims Change', () => {
         expect.objectContaining({
           events: expect.objectContaining({
             'https://schemas.openid.net/secevent/caep/event-type/token-claims-change': expect.objectContaining({
-              reason_admin: { en: "English reason", es: "Razón en español" }
+              reason_admin: { en: 'English reason', es: 'Razón en español' }
             })
           })
         })
